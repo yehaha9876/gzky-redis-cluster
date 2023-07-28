@@ -9,4 +9,4 @@ metadata:
     app.kubernetes.io/created-by: gzky-redis-operator
   name: rediscluster-sample
 spec:
-  # TODO(user): Add fields here
+  masterNum: 3
