@@ -1,0 +1,12 @@
+apiVersion: redis.cache.gzky.com/v1
+kind: RedisCluster
+metadata:
+  labels:
+    app.kubernetes.io/name: rediscluster
+    app.kubernetes.io/instance: rediscluster-sample
+    app.kubernetes.io/part-of: gzky-redis-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: gzky-redis-operator
+  name: rediscluster-sample
+spec:
+  # TODO(user): Add fields here
