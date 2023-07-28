@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -47,9 +48,13 @@ type RedisClusterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.15.0/pkg/reconcile
 func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	var redisCluster redisv1.RedisCluster
+	if err := r.Get(ctx, req.NamespacedName, &redisCluster); err != nil {
+		log.Error(err, "RedisCluster get error")
+	}
+	fmt.Printf("RedisCluster is got %+v", redisCluster)
 
 	return ctrl.Result{}, nil
 }
