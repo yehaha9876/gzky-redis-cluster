@@ -1,0 +1,10 @@
+- op: add
+  path: /spec/versions/0/schema/openAPIV3Schema/properties/spec/properties/podTemplate/properties/metadata
+  value: 
+    description: 'Standard object''s metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata'
+    type: object
+    properties:
+      labels:
+        additionalProperties:
+          type: string
+        type: object

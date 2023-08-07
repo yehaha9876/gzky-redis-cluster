@@ -11,6 +11,8 @@ spec:
     kind: RedisCluster
     listKind: RedisClusterList
     plural: redisclusters
+    shortNames:
+    - grc
     singular: rediscluster
   scope: Namespaced
   versions:
@@ -39,10 +41,7 @@ spec:
                   to remove/update
                 format: int32
                 type: integer
-              slaveNumEach:
-                format: int32
-                type: integer
-              template:
+              podTemplate:
                 description: PodTemplateSpec describes the data a pod should have
                   when created from a template
                 properties:
@@ -7536,6 +7535,9 @@ spec:
                     - containers
                     type: object
                 type: object
+              slaveNumEach:
+                format: int32
+                type: integer
             required:
             - masterNum
             type: object

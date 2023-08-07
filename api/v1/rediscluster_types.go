@@ -33,7 +33,7 @@ type RedisClusterSpec struct {
 	MasterNum    int32 `json:"masterNum"`
 	SlaveNumEach int32 `json:"slaveNumEach,omitempty"`
 
-	Template kubeapiv1.PodTemplateSpec `json:"template,omitempty"`
+	PodTemplate *kubeapiv1.PodTemplateSpec `json:"podTemplate,omitempty"`
 }
 
 // RedisClusterStatus defines the observed state of RedisCluster
@@ -45,6 +45,9 @@ type RedisClusterStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+//+k8s:openapi-gen=true
+//+kubebuilder:resource:scope=Namespaced,shortName=grc
 
 // RedisCluster is the Schema for the redisclusters API
 type RedisCluster struct {
@@ -56,6 +59,7 @@ type RedisCluster struct {
 }
 
 //+kubebuilder:object:root=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // RedisClusterList contains a list of RedisCluster
 type RedisClusterList struct {

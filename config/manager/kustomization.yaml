@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: harbor.gzky.com/test/gzky-reids-operator
-  newTag: 0.0.1
+  newTag: 0.0.5

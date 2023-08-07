@@ -10,3 +10,102 @@ metadata:
   name: rediscluster-sample
 spec:
   masterNum: 3
+  podTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/component: redis
+        app.kubernetes.io/instance: redis-node-test
+        app.kubernetes.io/name: node-for-redis
+    spec:
+      containers:
+      - args:
+        - --v=1
+        - --c=/redis-conf/redis.conf
+        - --logtostderr=true
+        - --alsologtostderr=true
+        - --rs=redis-node-test-node-for-redis
+        - --t=10s
+        - --d=10s
+        - --ns=$(POD_NAMESPACE)
+        - --ip=$(POD_IP)
+        - --cluster-node-timeout=2000
+        - --config-file=/redis-extra-conf/redis.conf
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        image: ibmcom/node-for-redis:0.3.11
+        imagePullPolicy: IfNotPresent
+        livenessProbe:
+          failureThreshold: 30
+          httpGet:
+            path: /live
+            port: http
+          initialDelaySeconds: 12
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        name: redis-node
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        - containerPort: 6379
+          name: redis
+          protocol: TCP
+        - containerPort: 16379
+          name: cluster
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 12
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
+        resources: {}
+        securityContext: {}
+        volumeMounts:
+        - mountPath: /redis-data
+          name: data
+        - mountPath: /redis-conf
+          name: conf
+        - mountPath: /redis-extra-conf
+          name: extra-conf
+        - mountPath: /podinfo
+          name: podinfo
+      securityContext: {}
+      topologySpreadConstraints:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: database
+            app.kubernetes.io/instance: redis-node-test
+            app.kubernetes.io/name: node-for-redis
+        maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+      volumes:
+      - emptyDir: {}
+        name: data
+      - emptyDir: {}
+        name: conf
+      - configMap:
+          items:
+          - key: redis.conf
+            path: redis.conf
+          name: redis-node-test-node-for-redis
+        name: extra-conf
+      - downwardAPI:
+          items:
+          - path: mem_limit
+            resourceFieldRef:
+              containerName: redis-node
+              resource: limits.memory
+        name: podinfo
