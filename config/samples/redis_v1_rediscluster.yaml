@@ -13,99 +13,60 @@ spec:
   podTemplate:
     metadata:
       labels:
-        app.kubernetes.io/component: redis
-        app.kubernetes.io/instance: redis-node-test
-        app.kubernetes.io/name: node-for-redis
+        redis-node: redis-node
     spec:
-      containers:
-      - args:
-        - --v=1
-        - --c=/redis-conf/redis.conf
-        - --logtostderr=true
-        - --alsologtostderr=true
-        - --rs=redis-node-test-node-for-redis
-        - --t=10s
-        - --d=10s
-        - --ns=$(POD_NAMESPACE)
-        - --ip=$(POD_IP)
-        - --cluster-node-timeout=2000
-        - --config-file=/redis-extra-conf/redis.conf
+      initContainers:
+      - name: redis-init
+        image: harbor.gzky.com/devops-example/busybox:latest
+        imagePullPolicy: IfNotPresent
         env:
-        - name: POD_NAMESPACE
-          valueFrom:
-            fieldRef:
-              fieldPath: metadata.namespace
         - name: POD_IP
           valueFrom:
             fieldRef:
+              apiVersion: v1
               fieldPath: status.podIP
-        image: ibmcom/node-for-redis:0.3.11
+        command:
+          - /bin/sh
+          - -c
+          - |
+            mkdir /redis-cluster/data /redis-cluster/conf
+            cp /redis-conf/redis.conf /redis-cluster/conf/redis.conf
+            sed "s/^bind.*$/bind $POD_IP/" -i /redis-cluster/conf/redis.conf
+            #sysctl -w net.core.somaxconn=65536
+        volumeMounts:
+        - mountPath: /redis-conf
+          name: conf
+        - mountPath: /redis-cluster
+          name: data
+  
+      containers:
+      - args:
+        - /redis-cluster/conf/redis.conf
+        image: harbor.gzky.com/test/redis:latest
         imagePullPolicy: IfNotPresent
-        livenessProbe:
-          failureThreshold: 30
-          httpGet:
-            path: /live
-            port: http
-          initialDelaySeconds: 12
-          periodSeconds: 10
-          successThreshold: 1
-          timeoutSeconds: 5
+        env:
+        - name: MEM_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              resource: limits.memory
         name: redis-node
         ports:
-        - containerPort: 8080
-          name: http
-          protocol: TCP
         - containerPort: 6379
           name: redis
           protocol: TCP
         - containerPort: 16379
           name: cluster
           protocol: TCP
-        readinessProbe:
-          failureThreshold: 3
-          httpGet:
-            path: /ready
-            port: http
-          initialDelaySeconds: 12
-          periodSeconds: 10
-          successThreshold: 1
-          timeoutSeconds: 5
-        resources: {}
-        securityContext: {}
         volumeMounts:
-        - mountPath: /redis-data
+        - mountPath: /redis-cluster
           name: data
-        - mountPath: /redis-conf
-          name: conf
-        - mountPath: /redis-extra-conf
-          name: extra-conf
-        - mountPath: /podinfo
-          name: podinfo
-      securityContext: {}
-      topologySpreadConstraints:
-      - labelSelector:
-          matchLabels:
-            app.kubernetes.io/component: database
-            app.kubernetes.io/instance: redis-node-test
-            app.kubernetes.io/name: node-for-redis
-        maxSkew: 1
-        topologyKey: topology.kubernetes.io/zone
-        whenUnsatisfiable: ScheduleAnyway
       volumes:
       - emptyDir: {}
         name: data
-      - emptyDir: {}
-        name: conf
       - configMap:
+          defaultMode: 420
           items:
           - key: redis.conf
             path: redis.conf
-          name: redis-node-test-node-for-redis
-        name: extra-conf
-      - downwardAPI:
-          items:
-          - path: mem_limit
-            resourceFieldRef:
-              containerName: redis-node
-              resource: limits.memory
-        name: podinfo
+          name: rediscluster-sample
+        name: conf

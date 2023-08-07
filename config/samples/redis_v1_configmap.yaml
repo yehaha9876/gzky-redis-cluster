@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rediscluster-sample
+data:
+  redis.conf: |
+    bind 198.218.7.31
+    port 6379
+    dir /redis-cluster/data
+    cluster-enabled yes
