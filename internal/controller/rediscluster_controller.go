@@ -18,8 +18,11 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	logr "github.com/go-logr/logr"
+	"gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,6 +39,9 @@ import (
 type RedisClusterReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	log         logr.Logger
+	redisConfig map[string]string
 }
 
 //+kubebuilder:rbac:groups="",resources=pods;configmaps,verbs=get;list;watch;create;update;patch;delete
@@ -53,58 +59,80 @@ type RedisClusterReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.15.0/pkg/reconcile
 func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx)
+	r.log = log.FromContext(ctx)
 
 	redisCluster := &redisv1.RedisCluster{}
 	if err := r.Get(ctx, req.NamespacedName, redisCluster); err != nil {
-		log.Error(err, "RedisCluster get error")
+		r.log.Error(err, "RedisCluster get error")
 	}
 
 	if redisCluster == nil {
-		log.Info("No redis cluster cr find, return")
+		r.log.Info("No redis cluster cr find, return")
 		return ctrl.Result{}, nil
 	}
 
-	redisConfig := &corev1.ConfigMap{}
-	namespacedName := types.NamespacedName{
-		Name:      redisCluster.Name,
-		Namespace: redisCluster.Namespace,
+	if err := r.getRedisConfig(redisCluster); err != nil {
+		r.log.Error(err, "Can't get configmaps")
+		return ctrl.Result{}, nil
 	}
-	if err := r.Get(ctx, namespacedName, redisConfig); err != nil {
-		log.Error(err, "Get configmap err")
-	}
-	log.Info("get redisconfig", "config:", redisConfig)
 
 	podList, err := r.getAllRedisPod(redisCluster)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	log.Info("Pod list", "podlist lenght", len(podList))
+	r.log.Info("Pod list", "podlist lenght", len(podList))
 
 	r.addDeletePods(podList, redisCluster)
 	readyFlag, _, err := r.checkAllPodReady(redisCluster)
 	if err != nil {
-		log.Error(err, "RedisCluster get error")
-		log.Info("Wait all pod ready")
+		r.log.Error(err, "RedisCluster get error")
 	}
 
 	if readyFlag {
-		log.Info("All pod ready")
+		r.log.Info("All pod ready")
+
+		clusterRedis := ClusterRedis{}
+		clusterRedis.InitCluster(podList, r.redisConfig)
 	}
 
-	log.Info("Do return")
+	r.log.Info("Do return")
 
 	return ctrl.Result{}, nil
 }
 
+func (r *RedisClusterReconciler) getRedisConfig(redisCluster *redisv1.RedisCluster) error {
+	redisConfigMap := &corev1.ConfigMap{}
+	namespacedName := types.NamespacedName{
+		Name:      redisCluster.Name,
+		Namespace: redisCluster.Namespace,
+	}
+
+	if err := r.Get(context.Background(), namespacedName, redisConfigMap); err != nil {
+		return err
+	}
+
+	if redisConfigMap == nil {
+		return errors.New("Can't find redis configmaps")
+	}
+
+	var contents string
+	if val, ok := redisConfigMap.Data["redis.conf"]; ok {
+		contents = val
+	}
+
+	if err := yaml.Unmarshal([]byte(contents), &r.redisConfig); err != nil {
+		return err
+	}
+	fmt.Println("Configmap:", r.redisConfig)
+	return nil
+}
+
 func (r *RedisClusterReconciler) getAllRedisPod(redisCluster *redisv1.RedisCluster) ([]corev1.Pod, error) {
-	log := log.FromContext(context.Background())
 	podLabels := labels.Set{}
 
 	if redisCluster.Spec.PodTemplate != nil {
 		for k, v := range redisCluster.Spec.PodTemplate.Labels {
-			log.Info("lables", k, v)
 			podLabels[k] = v
 		}
 	}
@@ -115,29 +143,29 @@ func (r *RedisClusterReconciler) getAllRedisPod(redisCluster *redisv1.RedisClust
 		return podList.Items, err
 	}
 
-	return podList.Items, nil
-}
-
-func (r *RedisClusterReconciler) addDeletePods(podList []corev1.Pod, redisCluster *redisv1.RedisCluster) {
-	log := log.FromContext(context.Background())
-	var vailablePodsNum = 0
-	for _, pod := range podList {
+	pods := []corev1.Pod{}
+	for _, pod := range podList.Items {
 		if pod.DeletionTimestamp != nil {
 			continue
 		}
-		vailablePodsNum++
+		pods = append(pods, pod)
 	}
 
+	return pods, nil
+}
+
+func (r *RedisClusterReconciler) addDeletePods(podList []corev1.Pod, redisCluster *redisv1.RedisCluster) {
+
 	needPodNum := int(redisCluster.Spec.MasterNum) * int(1+redisCluster.Spec.SlaveNumEach)
-	for i := vailablePodsNum; i < needPodNum; i++ {
+	for i := len(podList); i < needPodNum; i++ {
 		newPod := newPodTemplat(redisCluster)
-		log.Info("123123")
+		r.log.Info("Create pod")
 		if err := r.Create(context.Background(), newPod); err != nil {
-			log.Info("Create pod error", "retourn ", err)
+			r.log.Info("Create pod error", "retourn ", err)
 		}
 	}
 
-	for i := vailablePodsNum; i > needPodNum; i-- {
+	for i := len(podList); i > needPodNum; i-- {
 		delPod := podList[len(podList)-1]
 		podList = podList[:len(podList)-1]
 		r.Delete(context.Background(), &delPod)
@@ -152,8 +180,8 @@ func (r *RedisClusterReconciler) checkAllPodReady(redisCluster *redisv1.RedisClu
 	} else {
 		for _, pod := range podList {
 			for _, cond := range pod.Status.Conditions {
-				if cond.Type == corev1.PodReady && cond.Status != corev1.ConditionTrue {
-					readyPods = append(readyPods)
+				if cond.Type == corev1.PodReady && cond.Status == corev1.ConditionTrue {
+					readyPods = append(readyPods, pod)
 				}
 			}
 		}
@@ -161,6 +189,7 @@ func (r *RedisClusterReconciler) checkAllPodReady(redisCluster *redisv1.RedisClu
 
 	allReadyFlag := false
 	needPodNum := int(redisCluster.Spec.MasterNum * (1 + redisCluster.Spec.SlaveNumEach))
+	r.log.Info("Get ready pods ", "count", len(readyPods), "need", needPodNum)
 	if len(readyPods) == needPodNum {
 		allReadyFlag = true
 	}
@@ -198,5 +227,6 @@ func (r *RedisClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&redisv1.RedisCluster{}).
 		Owns(&corev1.Pod{}).
+		Owns(&corev1.ConfigMap{}).
 		Complete(r)
 }
