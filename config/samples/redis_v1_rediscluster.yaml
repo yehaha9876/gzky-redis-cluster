@@ -40,7 +40,8 @@ spec:
           name: data
   
       containers:
-      - args:
+      - command:
+        - redis-server
         - /redis-cluster/conf/redis.conf
         image: harbor.gzky.com/test/redis:latest
         imagePullPolicy: IfNotPresent

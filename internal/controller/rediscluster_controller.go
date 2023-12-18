@@ -22,7 +22,6 @@ import (
 	"fmt"
 
 	logr "github.com/go-logr/logr"
-	"gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -93,7 +92,8 @@ func (r *RedisClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.log.Info("All pod ready")
 
 		clusterRedis := ClusterRedis{}
-		clusterRedis.InitCluster(podList, r.redisConfig)
+		clusterRedis.InitCluster(podList, *redisCluster, r.redisConfig)
+		clusterRedis.OperateIfNeeded()
 	}
 
 	r.log.Info("Do return")
@@ -121,9 +121,7 @@ func (r *RedisClusterReconciler) getRedisConfig(redisCluster *redisv1.RedisClust
 		contents = val
 	}
 
-	if err := yaml.Unmarshal([]byte(contents), &r.redisConfig); err != nil {
-		return err
-	}
+	r.redisConfig = ConverToMap(contents, `\s`)
 	fmt.Println("Configmap:", r.redisConfig)
 	return nil
 }
